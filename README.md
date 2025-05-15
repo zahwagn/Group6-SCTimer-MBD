@@ -5,7 +5,7 @@
 - Dwigina Sitti Zahwa     2306250724
 - Tri Yoga Arsyad         2306161920
 - Muhammad Rifat Faqih    2306250762
-- FARHAN RAMADHANI ZAKIYYANDI
+- Farhan Ramadhani Zakiyyandi 230622412
 
 ## i. Introduction to the problem and the solution
 SC e-Timer dirangcang karena keresahan Mahasiswa DTE, di Gedung DTE terdapat Student Corner untuk mahasiswa yang ingin mengerjakan tugas ataupun belajar, tetapi ruangan ini hanya bisa menampung 10 mahasiswa padahal terdapat lebih dari `500 mahasiswa`, oleh karena itu sering kali banyak mahasiswa yang ingin menggunakan Student Corner tetapi sudah penuh. Oleh karena itu, dibuat solusi **`Student Corner e-Timer`**. Jadi, dalam satu hari mahasiswa akan diberi `limit waktu` menggunakan `16-key Keypad` jika input tersebur bisa akses, maka `LED Hijau` menyala, tetapi jika sudah limit `LED Merah` menyala dan sebagai penanda menggunakan `buzzer` yang menyala jika sudah time limit. Rancangan ini menggunakan beberpa komponen dalam pembuatannya, antara lain:
