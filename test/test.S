@@ -24,6 +24,14 @@ DS3231_RD:
     CBI   DDRC, 2         ; Pin PC2 i/p (save rtc to EEPROM)
     SBI   PORTC, 2        ; Enable pull-up resistor
 
+    ; Konfigurasi int0 pada PC2
+    CBI   DDRD, 2         ; Pin PC2 i/p (save rtc to EEPROM)
+    SBI   PORTD, 2        ; Enable pull-up resistor
+
+     ; Konfigurasi PD7 sebagai input dengan pull-up untuk reset
+    CBI   DDRD, 7         ; Set PD7 sebagai input
+    SBI   PORTD, 7        ; Enable pull-up resistor
+
     ; Konfigurasi INT0 (eksternal interrupt pada PD2)
     LDI   R16, (1<<ISC01) ; Trigger INT0 pada falling edge (LOW)
     STS   EICRA, R16      ; Set interrupt control register
@@ -65,11 +73,15 @@ again:
     ;----------------------------------------------------------
     RCALL I2C_STOP        ;transmit STOP condition
     ;----------------------------------------------------------
+
     RCALL save_rtc_to_eeprom
-    
+
+    ; Bandingkan detik di 0x0002 dengan 0x0008
+    RCALL compare_eeprom_seconds
+
     ; Cek flag penyimpanan yang di-set oleh interrupt
     CPI   R21, 1          ; Apakah flag = 1?
-    BRNE  skip_saving     ; Jika tidak, lompat
+    BRNE  skip_saving     ; Jika tidak, lompat    
     
     ; Flag = 1, simpan data ke EEPROM di alamat 0x0008 dan kelipatannya
     PUSH  R21             ; Simpan flag
@@ -152,28 +164,41 @@ ext:RJMP  again
 ;==============================================================
 ; External Interrupt 0 Vector (INT0)
 ;==============================================================
-.global INT0_vect
 INT0_vect:
+    ; Simpan register dan status
     PUSH  R16
-    IN    R16, SREG        ; Simpan Status Register
+    IN    R16, SREG
     PUSH  R16
-    
-    ; Set flag untuk menyimpan data ke EEPROM
-    LDI   R16, 1
-    MOV   R21, R16         ; Set flag langsung ke R21
-    
-    ; Debounce delay sederhana
     PUSH  R17
+    PUSH  R18
+    PUSH  R19
+    
+    ; Set flag dengan jelas
+    LDI   R16, 1
+    MOV   R21, R16         ; Set flag untuk menyimpan data
+    
+    ; Tambahkan visual indicator bahwa INT0 terpicu
+    LDI   R17, 0x03       ; Digit 3
+    LDI   R18, 0x0A       ; Tampilkan special char ('*')  
+    RCALL send_bytes
+    
+    ; Debounce delay yang lebih efektif
     LDI   R17, 0xFF
+    LDI   R18, 0x0F
 debounce_loop:
+    DEC   R18
+    BRNE  debounce_loop
     DEC   R17
     BRNE  debounce_loop
-    POP   R17
     
+    ; Restore register
+    POP   R19
+    POP   R18
+    POP   R17
     POP   R16
-    OUT   SREG, R16        ; Kembalikan Status Register
+    OUT   SREG, R16
     POP   R16
-    RETI                   ; Return from interrupt
+    RETI
 
 ;==============================================================
 ;I2C subroutines
@@ -269,6 +294,10 @@ SPI_MAX7219_init:
       RET
 ;==============================================================
 send_bytes:
+      PUSH  R17
+      PUSH  R18
+      PUSH  R19
+
       CBI   PORTB, SS       ;enable slave device MAX7219
       OUT   SPDR, R17       ;transmit command
       ;--------------------------------------------------------
@@ -283,6 +312,10 @@ ll3:  IN    R19, SPSR
       RJMP  ll3             ;to complete
       ;--------------------------------------------------------
       SBI   PORTB, SS       ;disable slave device MAX7219
+
+      POP   R19
+      POP   R18
+      POP   R17
       RET
 ;==============================================================
 MAX7219_disp_text:
@@ -298,6 +331,12 @@ MAX7219_disp_text:
 ;==============================================================
 binary2decimal:
 ;--------------
+      PUSH  R26
+      PUSH  R27
+      PUSH  R28  ; R28 sudah isi nilai yang perlu diproses
+      PUSH  R18  ; register yang digunakan dalam fungsi
+      
+
       CLR   R26             ;set counter1, initial value 0
       CLR   R27             ;set counter2, initial value 0
       ;--------------------------------------------------------
@@ -316,6 +355,10 @@ l80:  CPI   R28, 10         ;compare R28 with 10
 dsp:  MOV   R18, R28
       RCALL send_bytes      ;send command & data to MAX7219    
       ;--------------------------------------------------------
+      POP   R18
+      POP   R28
+      POP   R27
+      POP   R26
       RET
 ;==============================================================
 ; Fungsi untuk selalu menyimpan waktu RTC ke EEPROM alamat 0x0000
@@ -491,16 +534,15 @@ wait_eeprom_ready:
     RJMP  wait_eeprom_ready ; EEPROM is busy, wait
     RET
 
-
-; Fungsi untuk membandingkan seconds di 0x0002 dengan 0x0008 dan kelipatannya
-; dan mengirimkan sinyal jika perbedaan > 10
 ;==============================================================
-compare_eeprom_seconds:;==============================================================
+; Fungsi untuk membandingkan langsung seconds di 0x0002 dengan 0x0008
+; dan mengirimkan sinyal jika perbedaan > 10 detik (nilai desimal)
+;==============================================================
+compare_eeprom_seconds:
     PUSH  R16
     PUSH  R17
     PUSH  R18
     PUSH  R19
-    PUSH  R20
     
     ; Baca detik saat ini dari alamat 0x0002
     SBIC  EECR, 1
@@ -511,60 +553,62 @@ compare_eeprom_seconds:;========================================================
     OUT   EEARH, R18
     OUT   EEARL, R17
     SBI   EECR, 0         ; EERE = 1: baca dari EEPROM
-    IN    R16, EEDR       ; Baca detik saat ini
+    IN    R16, EEDR       ; R16 = detik saat ini (dalam BCD)
     
-    ; Baca indeks terakhir yang disimpan dari alamat 0x03FF
+    ; Baca detik dari alamat tetap 0x0008
     SBIC  EECR, 1
     RJMP  .-4
     
-    LDI   R18, 0x03       ; High byte alamat = 0x03
-    LDI   R17, 0xFF       ; Low byte alamat = 0xFF
+    LDI   R18, 0x00
+    LDI   R17, 0x08       ; Alamat tetap 0x0008
     OUT   EEARH, R18
     OUT   EEARL, R17
-    SBI   EECR, 0         ; EERE = 1: baca dari EEPROM
-    IN    R19, EEDR       ; Baca indeks terakhir
+    SBI   EECR, 0
+    IN    R17, EEDR       ; R17 = detik tersimpan (dalam BCD)
     
-    ; Jika indeks tidak valid atau 0, tidak ada data untuk dibandingkan
-    CPI   R19, 0xFF       ; Cek jika tidak valid
-    BREQ  compare_exit    ; Keluar jika tidak ada data
-    CPI   R19, 0          ; Cek jika indeks = 0
-    BREQ  compare_exit    ; Keluar jika tidak ada data sebelumnya
+    ; Konversi nilai BCD ke desimal
+    ; Konversi R16 (detik saat ini)
+    MOV   R18, R16
+    ANDI  R18, 0xF0       ; Isolasi digit puluhan
+    SWAP  R18             ; Pindahkan ke posisi rendah
+    LDI   R19, 10
+    MUL   R18, R19        ; R18 * 10
+    MOV   R18, R0         ; R18 = puluhan * 10
+    MOV   R19, R16
+    ANDI  R19, 0x0F       ; Isolasi digit satuan
+    ADD   R18, R19        ; R18 = nilai desimal detik saat ini
     
-    ; Hitung alamat data terakhir = 0x0008 + ((indeks-1) * 3)
-    DEC   R19             ; R19 = indeks-1 (data terakhir)
-    MOV   R20, R19        ; R20 = indeks-1
-    LSL   R20             ; R20 = (indeks-1) * 2
-    ADD   R20, R19        ; R20 = (indeks-1) * 3
-    LDI   R17, 0x08       ; Offset awal
-    ADD   R20, R17        ; R20 = 0x08 + ((indeks-1) * 3)
-    
-    ; Baca detik terakhir dari alamat yang dihitung
-    SBIC  EECR, 1
-    RJMP  .-4
-    
-    LDI   R18, 0x00       ; High byte alamat = 0x00
-    MOV   R17, R20        ; Low byte alamat = yang dihitung
-    OUT   EEARH, R18
-    OUT   EEARL, R17
-    SBI   EECR, 0         ; EERE = 1: baca dari EEPROM
-    IN    R17, EEDR       ; Baca detik terakhir
+    ; Konversi R17 (detik tersimpan)
+    MOV   R19, R17
+    ANDI  R19, 0xF0       ; Isolasi digit puluhan
+    SWAP  R19             ; Pindahkan ke posisi rendah
+    LDI   R16, 10
+    MUL   R19, R16        ; R19 * 10
+    MOV   R19, R0         ; R19 = puluhan * 10
+    MOV   R16, R17
+    ANDI  R16, 0x0F       ; Isolasi digit satuan
+    ADD   R19, R16        ; R19 = nilai desimal detik tersimpan
     
     ; Hitung perbedaan absolut
-    CP    R16, R17        ; Compare detik saat ini dengan detik terakhir
-    BRLO  detik_lebih_kecil ; Jika detik saat ini < detik terakhir
+    CP    R18, R19        ; Compare detik saat ini dengan detik tersimpan
+    BRLO  detik_lebih_kecil
     
-    ; Detik saat ini >= detik terakhir
-    SUB   R16, R17        ; R16 = detik saat ini - detik terakhir
-    MOV   R19, R16        ; R19 = selisih detik
+    SUB   R18, R19        ; R18 = detik saat ini - detik tersimpan
     RJMP  check_diff
     
 detik_lebih_kecil:
-    SUB   R17, R16        ; R17 = detik terakhir - detik saat ini
-    MOV   R19, R17        ; R19 = selisih detik
+    SUB   R19, R18        ; R19 = detik tersimpan - detik saat ini
+    MOV   R18, R19        ; R18 = selisih detik
     
 check_diff:
-    ; Cek apakah perbedaan > 10
-    CPI   R19, 10         ; Bandingkan dengan 10
+    ; Tampilkan selisih untuk debugging pada digit 6
+    MOV   R19, R18        ; Simpan selisih di R19 untuk penggunaan selanjutnya
+    LDI   R17, 0x06       ; Digit 6 (tidak digunakan untuk waktu)
+    MOV   R18, R19        ; Nilai yang ditampilkan
+    RCALL send_bytes
+    
+    ; Cek apakah perbedaan > 10 (nilai desimal)
+    CPI   R19, 10
     BRLO  compare_exit    ; Jika <= 10, keluar
     
     ; Perbedaan > 10, aktifkan sinyal pada PC2
@@ -573,7 +617,7 @@ check_diff:
     
     ; Loop sampai PD7 = high (1)
 check_pd7:
-    SBIC  PIND, 7         ; Skip if PD7 is clear (low)
+    SBIS  PIND, 7         ; Skip if PD7 is clear (low)
     RJMP  reset_pc2       ; PD7 = high, reset PC2
     RJMP  check_pd7       ; PD7 masih low, lanjut polling
     
@@ -583,7 +627,6 @@ reset_pc2:
     SBI   PORTC, 2        ; Enable pull-up resistor
     
 compare_exit:
-    POP   R20
     POP   R19
     POP   R18
     POP   R17
