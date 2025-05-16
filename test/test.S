@@ -9,27 +9,33 @@
 .global I2C_init
 .global DS3231_RD
 .global save_to_EEPROM
-.global keypad
+.global INT0_vect
 
 .org 0x0000
     rjmp DS3231_RD              ; Reset vector
+.org 0x0002
+    rjmp INT0_vect      ;External Interrupt 0 handler
 
 
 ;==============================================================
 DS3231_RD:
 ;---------
-    ; Setup keypad I/O
-    LDI   R16, 0xFF
-    OUT   DDRB, R16       ; port B o/p
-    LDI   R16, 0xF0       ; low nibble port D i/p (column lines)
-    OUT   DDRD, R16       ; high nibble port D o/p (row lines)
+    ; Konfigurasi tombol eksternal pada PC2
+    CBI   DDRC, 2         ; Pin PC2 i/p (save rtc to EEPROM)
+    SBI   PORTC, 2        ; Enable pull-up resistor
+
+    ; Konfigurasi INT0 (eksternal interrupt pada PD2)
+    LDI   R16, (1<<ISC01) ; Trigger INT0 pada falling edge (LOW)
+    STS   EICRA, R16      ; Set interrupt control register
     
-    ; Inisialisasi counter keypad dan buffer
-    CLR   R19             ; R19 = 0, key_count initially 0
-    CLR   R24             ; R24 = buffer[0] (ganti R20)
-    CLR   R25             ; R25 = buffer[1] (ganti R21)
-    CLR   R26             ; R26 = buffer[2] (ganti R22)
-    CLR   R27             ; R27 = buffer[3] (ganti R23)
+    LDI   R16, (1<<INT0)  ; Enable INT0
+    OUT   EIMSK, R16      ; Set external interrupt mask
+    
+    ; Inisialisasi flag in register instead of SRAM
+    CLR   R21             ; R21 = 0, flag initially cleared
+    
+    ; Enable global interrupt
+    SEI                   ; Set Global Interrupt Enable bit
 
 ;==============================================================
 ;read time
@@ -59,46 +65,24 @@ again:
     ;----------------------------------------------------------
     RCALL I2C_STOP        ;transmit STOP condition
     ;----------------------------------------------------------
-    
-    ; Selalu simpan waktu RTC ke EEPROM 0x0000 setiap kali dibaca
     RCALL save_rtc_to_eeprom
     
-    RCALL delay_ms
-
-    PUSH  R24             ; Simpan buffer keypad
-    PUSH  R25
-    PUSH  R26
-    PUSH  R27
+    ; Cek flag penyimpanan yang di-set oleh interrupt
+    CPI   R21, 1          ; Apakah flag = 1?
+    BRNE  skip_saving     ; Jika tidak, lompat
     
-    ; Baca input dari keypad
-    RCALL keypad_read
+    ; Flag = 1, simpan data ke EEPROM di alamat 0x0008 dan kelipatannya
+    PUSH  R21             ; Simpan flag
+    RCALL save_to_EEPROM  ; Simpan waktu ke alamat kelipatan 0x0008
+    POP   R21             ; Kembalikan flag
     
-    POP   R27             ; Pulihkan buffer keypad
-    POP   R26
-    POP   R25
-    POP   R24
-
-    ; Periksa apakah 4 angka telah dimasukkan
-    CPI   R19, 4
-    BRNE  skip_saving      ; Jika belum 4 angka, lompat
-    
-    ; 4 angka telah dimasukkan, simpan ke EEPROM
-    RCALL save_to_EEPROM
-    
-    ; Reset counter
-    CLR   R19
+    ; Reset flag setelah menyimpan
+    CLR   R21
     
 skip_saving:
 ;==============================================================
 ;read date
 ;---------
-    ; Simpan buffer keypad sebelum dibaca RTC
-    PUSH  R24             ; Simpan buffer keypad
-    PUSH  R25
-    PUSH  R26
-    PUSH  R27
-
-
     RCALL I2C_START       ;transmit START condition
     ;----------------------------------------------------------
     LDI   R27, 0b11010000 ;write address of DS3231
@@ -122,12 +106,6 @@ skip_saving:
     MOV   R20, R27        ;store copy in R20
     ;----------------------------------------------------------
     RCALL I2C_STOP        ;transmit STOP condition
-
-    ; Pulihkan buffer keypad setelah dibaca RTC
-    POP   R27             ; Pulihkan buffer keypad
-    POP   R26
-    POP   R25
-    POP   R24
     ;----------------------------------------------------------
     RCALL delay_ms
 ;==============================================================
@@ -170,6 +148,33 @@ skip_saving:
 ;--------------------------------------------------------------
     RCALL delay_ms
 ext:RJMP  again
+
+;==============================================================
+; External Interrupt 0 Vector (INT0)
+;==============================================================
+.global INT0_vect
+INT0_vect:
+    PUSH  R16
+    IN    R16, SREG        ; Simpan Status Register
+    PUSH  R16
+    
+    ; Set flag untuk menyimpan data ke EEPROM
+    LDI   R16, 1
+    MOV   R21, R16         ; Set flag langsung ke R21
+    
+    ; Debounce delay sederhana
+    PUSH  R17
+    LDI   R17, 0xFF
+debounce_loop:
+    DEC   R17
+    BRNE  debounce_loop
+    POP   R17
+    
+    POP   R16
+    OUT   SREG, R16        ; Kembalikan Status Register
+    POP   R16
+    RETI                   ; Return from interrupt
+
 ;==============================================================
 ;I2C subroutines
 ;==============================================================
@@ -297,7 +302,7 @@ binary2decimal:
       CLR   R27             ;set counter2, initial value 0
       ;--------------------------------------------------------
 l70:  CPI   R28, 100        ;compare R28 with 100
-      BRMI  l80             ;jump when R28 < 100 (hapus label Ret:)
+      BRMI  l80             ;jump when R28 < 100
       INC   R26             ;increment counter1 by 1
       SUBI  R28, 100        ;R28 = R28 - 100
       RJMP  l70
@@ -312,119 +317,6 @@ dsp:  MOV   R18, R28
       RCALL send_bytes      ;send command & data to MAX7219    
       ;--------------------------------------------------------
       RET
-;==============================================================
-; Fungsi untuk menyimpan data keypad ke EEPROM
-;==============================================================
-save_to_EEPROM:
-    PUSH  R16
-    PUSH  R17
-    PUSH  R18
-        PUSH  R20             ; Tambahkan register tambahan
-    PUSH  R21             ; yang mungkin digunakan
-
-    
-    ; Konversi 4 digit dari keypad ke alamat EEPROM (asumsi BCD format)
-    ; Misalnya 0123 -> alamat 0x0123
-    
-    ; Baca digit 0 dan 1 untuk membentuk byte alamat tinggi
-    MOV   R16, R24       ; Digit ratusan
-    SWAP  R16            ; Pindahkan ke nibble tinggi
-    OR    R16, R25       ; OR dengan digit puluhan -> alamat tinggi
-    MOV   R18, R16       ; R18 = high byte alamat
-    
-    ; Baca digit 2 dan 3 untuk membentuk byte alamat rendah
-    MOV   R16, R26       ; Digit satuan
-    SWAP  R16            ; Pindahkan ke nibble tinggi
-    OR    R16, R27       ; OR dengan digit ratusan -> alamat rendah
-    MOV   R17, R16       ; R17 = low byte alamat
-    
-    ; Tunggu hingga EEPROM siap
-    SBIC  EECR, 1
-    RJMP  .-4            ; Wait until EEPROM ready
-    
-    ; Simpan jam (R31) ke alamat yang dihitung
-    OUT   EEARH, R18
-    OUT   EEARL, R17
-    MOV   R16, R31
-    OUT   EEDR, R16
-    SBI   EECR, 2
-    SBI   EECR, 1
-    
-    ; Verification - Read back and display the first digit
-l2: SBIC  EECR, 1
-    RJMP  l2                ; Wait until EEPROM is ready
-    
-    ; Read from EEPROM address 0x03 (first digit)
-    OUT   EEARH, R18
-    OUT   EEARL, R17
-    SBI   EECR, 0           ; EERE = 1: read byte from EEPROM
-    IN    R16, EEDR         ; Get byte from data register
-    
-    ; Display read value on digit 8 for confirmation
-    MOV   R18, R16
-    LDI   R17, 8
-    RCALL send_bytes
-    
-    ; Blink display untuk indikasi
-    RCALL blink_display
-    
-    POP   R21
-    POP   R20
-    POP   R18
-    POP   R17
-    POP   R16
-    RET
-    
-;==============================================================
-; Helper subroutine to wait until EEPROM is ready for writing
-;==============================================================
-wait_eeprom_ready:
-    SBIC  EECR, 1         ; Skip if EEWE bit is cleared (EEPROM not busy)
-    RJMP  wait_eeprom_ready ; EEPROM is busy, wait
-    RET
-
-;==============================================================
-; Blink display to indicate data saved
-;==============================================================
-blink_display:
-    ; Save used registers
-    PUSH  R17
-    PUSH  R18
-    
-    ; Turn OFF display
-    LDI   R17, 0x0C       ; Set shutdown register
-    LDI   R18, 0x00       ; Turn OFF (shutdown mode)
-    RCALL send_bytes
-    
-    ; Short delay
-    RCALL delay_ms
-    
-    ; Turn ON display
-    LDI   R17, 0x0C       ; Set shutdown register
-    LDI   R18, 0x01       ; Turn ON (normal operation)
-    RCALL send_bytes
-    
-    ; Short delay
-    RCALL delay_ms
-    
-    ; Turn OFF again
-    LDI   R17, 0x0C
-    LDI   R18, 0x00
-    RCALL send_bytes
-    
-    ; Short delay
-    RCALL delay_ms
-    
-    ; Turn ON again
-    LDI   R17, 0x0C
-    LDI   R18, 0x01
-    RCALL send_bytes
-    
-    ; Restore registers
-    POP   R18
-    POP   R17
-    RET
-
 ;==============================================================
 ; Fungsi untuk selalu menyimpan waktu RTC ke EEPROM alamat 0x0000
 ;==============================================================
@@ -483,157 +375,261 @@ rtc_wait3:
     RET
 
 ;==============================================================
-; Fungsi baca keypad dan tambahkan ke buffer register
+; Fungsi untuk menyimpan waktu RTC ke alamat 0x0008 dan kelipatannya
+; saat interrupt INT0 terpicu
 ;==============================================================
-keypad_read:
+save_to_EEPROM:
     PUSH  R16
     PUSH  R17
-    PUSH  R20              ; Gunakan R20-R21 sebagai register sementara
-    PUSH  R21              ; BUKAN R24-R25 yang digunakan sebagai buffer
+    PUSH  R18
+    PUSH  R19
+    PUSH  R20
     
-    ;-----------------------------------------------------------
-gnd_rows:
-    LDI   R16, 0x0F       ;send 0 to high nibble port D
-    OUT   PORTD, R16      ;to ground all rows
-    ;-----------------------------------------------------------
-    NOP
-    IN    R16, PIND       ;read key pins
-    ANDI  R16, 0x0F       ;mask unused bits
-    CPI   R16, 0x0F       ;equal if no keypress
-    BRNE  check_keypress  ;jika ada keypress, periksa lebih lanjut
-    JMP   key_exit        ;no key pressed, keluar (gunakan JMP alih-alih BREQ)
+    ; Baca alamat terakhir dari EEPROM 0x03FF (alamat tertinggi)
+    ; yang menyimpan indeks kelipatan 0x0008 berikutnya
+    SBIC  EECR, 1
+    RJMP  .-4
     
-check_keypress:
-    ;-----------------------------------------------------------
-    RCALL delay_ms        ;delay to cancel switch bounce
-    ;-----------------------------------------------------------
-    IN    R16, PIND       ;2nd check for keypress
-    ANDI  R16, 0x0F       ;which ensures that 1st keypress
-    CPI   R16, 0x0F       ;was not erroneous due to spike noise
-    BRNE  continue_keypad ;jika masih ada keypress, lanjutkan
-    JMP   key_exit        ;gunakan JMP untuk jarak jauh
+    LDI   R18, 0x03       ; High byte alamat = 0x03
+    LDI   R17, 0xFF       ; Low byte alamat = 0xFF
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    SBI   EECR, 0         ; EERE = 1: baca dari EEPROM
+    IN    R19, EEDR       ; Baca indeks dari EEPROM
     
-continue_keypad:
-    ;-----------------------------------------------------------
-    LDI   R16, 0b01111111 ;ground row 1
-    OUT   PORTD, R16
-    NOP
-    IN    R16, PIND       ;read all columns
-    ANDI  R16, 0x0F       ;mask unsed bits
-    CPI   R16, 0x0F       ;equal if no key
-    BRNE  row1_col        ;row 1, find column
-    ;-----------------------------------------------------------
-    LDI   R16, 0b10111111 ;ground row 2
-    OUT   PORTD, R16
-    NOP
-    IN    R16, PIND       ;read all columns
-    ANDI  R16, 0x0F       ;mask unsed bits
-    CPI   R16, 0x0F       ;equal if no key
-    BRNE  row2_col        ;row 2, find column
-    ;-----------------------------------------------------------
-    LDI   R16, 0b11011111 ;ground row 3
-    OUT   PORTD, R16
-    NOP
-    IN    R16, PIND       ;read all columns
-    ANDI  R16, 0x0F       ;mask unsed bits
-    CPI   R16, 0x0F       ;equal if no key
-    BRNE  row3_col        ;row 3, find column
-    ;-----------------------------------------------------------
-    LDI   R16, 0b11101111 ;ground row 4
-    OUT   PORTD, R16
-    NOP
-    IN    R16, PIND       ;read all columns
-    ANDI  R16, 0x0F       ;mask unsed bits
-    CPI   R16, 0x0F       ;equal if no key
-    BRNE  row4_col        ;row 4, find column
-    RJMP  key_exit
-;---------------------------------------------------------------
-row1_col:
-    LDI   R30, lo8(row1_digits)
-    LDI   R31, hi8(row1_digits) ;assign pointer Z to row 1 table
-    RJMP  find_digit
-;---------------------------------------------------------------
-row2_col:
-    LDI   R30, lo8(row2_digits)
-    LDI   R31, hi8(row2_digits) ;assign pointer Z to row 2 table
-    RJMP  find_digit
-;---------------------------------------------------------------
-row3_col:
-    LDI   R30, lo8(row3_digits)
-    LDI   R31, hi8(row3_digits) ;assign pointer Z to row 3 table
-    RJMP  find_digit
-;---------------------------------------------------------------
-row4_col:
-    LDI   R30, lo8(row4_digits)
-    LDI   R31, hi8(row4_digits) ;assign pointer Z to row 4 table
-    RJMP  find_digit
-;---------------------------------------------------------------
-find_digit:
-    LSR   R16           ;logical shift right column value
-    BRCC  digit_located ;if C flag is cleared, jump to label
-    LPM   R20, Z+       ;otherwise, increment Z pointer
-    RJMP  find_digit    ;jump & repeat
-;---------------------------------------------------------------
-digit_located:
-    LPM   R16, Z        ;load digit value in table via Z
+    ; Jika nilai tidak valid (0xFF), mulai dari 0
+    CPI   R19, 0xFF
+    BRNE  valid_index
+    LDI   R19, 0          ; Indeks awal = 0
     
-    ; Cek apakah tombol 0-9 (bukan fungsi)
-    CPI   R16, 10
-    BRSH  key_exit      ; Jika >= 10, bukan digit, keluar
+valid_index:
+    ; Hitung alamat = 0x0008 + (indeks * 3)
+    MOV   R20, R19        ; R20 = indeks
+    LSL   R20             ; R20 = indeks * 2
+    ADD   R20, R19        ; R20 = indeks * 3
+    LDI   R16, 0x08       ; Offset awal
+    ADD   R20, R16        ; R20 = 0x08 + (indeks * 3)
     
-    ; Simpan digit ke buffer register
-    CPI   R19, 4        ; Cek jika buffer penuh
-    BRSH  key_exit      ; Jika >= 4, buffer penuh, keluar
+    ; Save seconds (R28) ke alamat yang dihitung
+    SBIC  EECR, 1
+    RJMP  .-4
     
-    ; Simpan ke buffer register yang sesuai berdasarkan key_count
-    CPI   R19, 0
-    BRNE  check_digit1
-    MOV   R24, R16      ; buffer[0] = digit (ganti R20)
-    RJMP  save_done
-check_digit1:
-    CPI   R19, 1
-    BRNE  check_digit2
-    MOV   R25, R16      ; buffer[1] = digit (ganti R21)
-    RJMP  save_done
-check_digit2:
-    CPI   R19, 2
-    BRNE  check_digit3
-    MOV   R26, R16      ; buffer[2] = digit (ganti R22)
-    RJMP  save_done
-check_digit3:
-    MOV   R27, R16      ; buffer[3] = digit (ganti R23)
+    LDI   R18, 0x00       ; High byte of EEPROM address
+    MOV   R17, R20        ; Low byte of EEPROM address
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    MOV   R16, R28        ; Data to write (seconds)
+    OUT   EEDR, R16
+    SBI   EECR, 2
+    SBI   EECR, 1
     
-save_done:
-    ; Tampilkan digit pada MAX7219
-    MOV   R28, R16
-    LDI   R17, 4        ; Posisi digit di MAX7219 (digit 4)
-    SUB   R17, R19      ; Tentukan posisi tampilan (4,3,2,1)
-    RCALL binary2decimal ; Tampilkan digit
+    ; Save minutes (R30) ke alamat yang dihitung + 1
+    SBIC  EECR, 1
+    RJMP  .-4
     
-    ; Increment counter
-    INC   R19
+    LDI   R18, 0x00
+    MOV   R17, R20
+    INC   R17             ; Alamat + 1
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    MOV   R16, R30        ; Data to write (minutes)
+    OUT   EEDR, R16
+    SBI   EECR, 2
+    SBI   EECR, 1
     
-    ; Tunggu tombol dilepas
-wait_key_release:
-    NOP
-    IN    R16, PIND       ;read key pins
-    ANDI  R16, 0x0F       ;mask unused bits
-    CPI   R16, 0x0F       ;equal if no keypress
-    BRNE  wait_key_release ;if key still pressed, wait
+    ; Save hours (R31) ke alamat yang dihitung + 2
+    SBIC  EECR, 1
+    RJMP  .-4
     
-key_exit:
-    POP   R21             ; Restore R20-R21, bukan R24-R25
+    LDI   R18, 0x00
+    MOV   R17, R20
+    SUBI  R17, -2         ; Alamat + 2
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    MOV   R16, R31        ; Data to write (hours)
+    OUT   EEDR, R16
+    SBI   EECR, 2
+    SBI   EECR, 1
+    
+    ; Update indeks untuk penyimpanan berikutnya
+    INC   R19             ; indeks++
+    
+    ; Jika mencapai batas (misalnya 80 kali penyimpanan), reset ke 0
+    CPI   R19, 80         ; Batas maksimum (80*3 = 240 byte)
+    BRLO  save_index
+    LDI   R19, 0          ; Reset indeks
+    
+save_index:
+    ; Simpan indeks yang diperbarui kembali ke 0x03FF
+    SBIC  EECR, 1
+    RJMP  .-4
+    
+    LDI   R18, 0x03
+    LDI   R17, 0xFF
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    MOV   R16, R19
+    OUT   EEDR, R16
+    SBI   EECR, 2
+    SBI   EECR, 1
+    
+    ; Blink display to indicate data has been saved
+    RCALL blink_display
+    
     POP   R20
+    POP   R19
+    POP   R18
+    POP   R17
+    POP   R16
+    RET
+    
+;==============================================================
+; Helper subroutine to wait until EEPROM is ready for writing
+;==============================================================
+wait_eeprom_ready:
+    SBIC  EECR, 1         ; Skip if EEWE bit is cleared (EEPROM not busy)
+    RJMP  wait_eeprom_ready ; EEPROM is busy, wait
+    RET
+
+
+; Fungsi untuk membandingkan seconds di 0x0002 dengan 0x0008 dan kelipatannya
+; dan mengirimkan sinyal jika perbedaan > 10
+;==============================================================
+compare_eeprom_seconds:;==============================================================
+    PUSH  R16
+    PUSH  R17
+    PUSH  R18
+    PUSH  R19
+    PUSH  R20
+    
+    ; Baca detik saat ini dari alamat 0x0002
+    SBIC  EECR, 1
+    RJMP  .-4
+    
+    LDI   R18, 0x00       ; High byte alamat = 0x00
+    LDI   R17, 0x02       ; Low byte alamat = 0x02
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    SBI   EECR, 0         ; EERE = 1: baca dari EEPROM
+    IN    R16, EEDR       ; Baca detik saat ini
+    
+    ; Baca indeks terakhir yang disimpan dari alamat 0x03FF
+    SBIC  EECR, 1
+    RJMP  .-4
+    
+    LDI   R18, 0x03       ; High byte alamat = 0x03
+    LDI   R17, 0xFF       ; Low byte alamat = 0xFF
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    SBI   EECR, 0         ; EERE = 1: baca dari EEPROM
+    IN    R19, EEDR       ; Baca indeks terakhir
+    
+    ; Jika indeks tidak valid atau 0, tidak ada data untuk dibandingkan
+    CPI   R19, 0xFF       ; Cek jika tidak valid
+    BREQ  compare_exit    ; Keluar jika tidak ada data
+    CPI   R19, 0          ; Cek jika indeks = 0
+    BREQ  compare_exit    ; Keluar jika tidak ada data sebelumnya
+    
+    ; Hitung alamat data terakhir = 0x0008 + ((indeks-1) * 3)
+    DEC   R19             ; R19 = indeks-1 (data terakhir)
+    MOV   R20, R19        ; R20 = indeks-1
+    LSL   R20             ; R20 = (indeks-1) * 2
+    ADD   R20, R19        ; R20 = (indeks-1) * 3
+    LDI   R17, 0x08       ; Offset awal
+    ADD   R20, R17        ; R20 = 0x08 + ((indeks-1) * 3)
+    
+    ; Baca detik terakhir dari alamat yang dihitung
+    SBIC  EECR, 1
+    RJMP  .-4
+    
+    LDI   R18, 0x00       ; High byte alamat = 0x00
+    MOV   R17, R20        ; Low byte alamat = yang dihitung
+    OUT   EEARH, R18
+    OUT   EEARL, R17
+    SBI   EECR, 0         ; EERE = 1: baca dari EEPROM
+    IN    R17, EEDR       ; Baca detik terakhir
+    
+    ; Hitung perbedaan absolut
+    CP    R16, R17        ; Compare detik saat ini dengan detik terakhir
+    BRLO  detik_lebih_kecil ; Jika detik saat ini < detik terakhir
+    
+    ; Detik saat ini >= detik terakhir
+    SUB   R16, R17        ; R16 = detik saat ini - detik terakhir
+    MOV   R19, R16        ; R19 = selisih detik
+    RJMP  check_diff
+    
+detik_lebih_kecil:
+    SUB   R17, R16        ; R17 = detik terakhir - detik saat ini
+    MOV   R19, R17        ; R19 = selisih detik
+    
+check_diff:
+    ; Cek apakah perbedaan > 10
+    CPI   R19, 10         ; Bandingkan dengan 10
+    BRLO  compare_exit    ; Jika <= 10, keluar
+    
+    ; Perbedaan > 10, aktifkan sinyal pada PC2
+    SBI   DDRC, 2         ; Set PC2 sebagai output
+    SBI   PORTC, 2        ; Set PC2 high (1)
+    
+    ; Loop sampai PD7 = high (1)
+check_pd7:
+    SBIC  PIND, 7         ; Skip if PD7 is clear (low)
+    RJMP  reset_pc2       ; PD7 = high, reset PC2
+    RJMP  check_pd7       ; PD7 masih low, lanjut polling
+    
+reset_pc2:
+    CBI   PORTC, 2        ; Reset PC2 ke low (0)
+    CBI   DDRC, 2         ; Set PC2 kembali ke input
+    SBI   PORTC, 2        ; Enable pull-up resistor
+    
+compare_exit:
+    POP   R20
+    POP   R19
+    POP   R18
     POP   R17
     POP   R16
     RET
 
-
-; Tabel digit untuk keypad
-row1_digits: .byte  1,2,3,10
-row2_digits: .byte  4,5,6,11
-row3_digits: .byte  7,8,9,12
-row4_digits: .byte  15,0,14,13
+;==============================================================
+; Blink display to indicate data saved
+;==============================================================
+blink_display:
+    ; Save used registers
+    PUSH  R17
+    PUSH  R18
+    
+    ; Turn OFF display
+    LDI   R17, 0x0C       ; Set shutdown register
+    LDI   R18, 0x00       ; Turn OFF (shutdown mode)
+    RCALL send_bytes
+    
+    ; Short delay
+    RCALL delay_ms
+    
+    ; Turn ON display
+    LDI   R17, 0x0C       ; Set shutdown register
+    LDI   R18, 0x01       ; Turn ON (normal operation)
+    RCALL send_bytes
+    
+    ; Short delay
+    RCALL delay_ms
+    
+    ; Turn OFF again
+    LDI   R17, 0x0C
+    LDI   R18, 0x00
+    RCALL send_bytes
+    
+    ; Short delay
+    RCALL delay_ms
+    
+    ; Turn ON again
+    LDI   R17, 0x0C
+    LDI   R18, 0x01
+    RCALL send_bytes
+    
+    POP   R18
+    POP   R17
+    RET
 
 ;==============================================================
 ;delay subroutines
