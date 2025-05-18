@@ -1,8 +1,3 @@
----
-title: Dokumentasi Kelompok PA - 6
-
----
-
 # Dokumentasi Kelompok PA - 6
 - Muhammad Raihan Mustofa 2306161946
 - Dwigina Sitti Zahwa 2306250724
