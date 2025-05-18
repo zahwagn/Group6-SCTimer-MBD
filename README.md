@@ -37,7 +37,7 @@ LED pada PIN PC2 menyala ketika selisih waktu antara nilai di alamat EEPROM 0x00
 #### 7. Resistor
 Komponen pembatas arus untuk LED dan pull-up untuk button. Resistor pembatas arus untuk LED untuk melindungi dari arus berlebih dan pull-up atau pull-down untuk konfigurasi input. Mengaktifkan pull-up untuk menghindari adanya floating sehingga pembacaan terhindar dari noise.
 
-### b.Software Component
+### C.Software Component
 erancangan Perangkat lunak yang diterapkan dalam proyek Student Corner e-Time. Sistem ini dituliskan menggunakan bahasa Assembly melalui Arduino IDE, yang berfungsi untuk mengelola komponen seperti RTC, tombol, EEPROM, LED, buzzer, dan tampilan simulasi proyek menggunakan Proteus 8 Professional guna memastikan kinerja sistem yang sesuai
 #### Visual Studio Code (VS Code)
 Dijadikan sebagai program pengolah teks alternatif untuk menyusun kode (jika tidak menggunakan Arduino IDE secara langsung). VS Code juga dapat ditambahkan dengan ekstensi untuk mendukung pengembangan proyek Arduino dan Assembly dengan penyorotan sintaks, IntelliSense, dan VS Code dipilih karena:
