@@ -57,6 +57,34 @@ Digunakan untuk mengembangkan simulasi sirkuit elektronik pada proyek. selain it
 ## iii. Software implementation details
 
 ## iv. Test results and performance evaluation
+####  Functional Testing
+- RTC Clock Functionality: Setelah kami meng upload code program dan melihat keduad led untuk led yang berwarna hijau dalam keadan nyala dan led merah dalam keadaan mati. ketika kami menekan botto selama 10 detik sama hasilnya led merah tidak kunjung menyala, kami juga sudah mencoba dengan mencabut beberapa komponen seperti botton, transistor hasilnya masi sama.
+- Display System: Untuk uji coba ketika kami melakukan pada proteus bisa berjalan dengan baik akan tetapi ketika pada fisik tidak berhasil. kami mertimbangkan apakah karean komponene dan bebrapa keslaahn teknis lainya yang menyebabkan hal ini terjadi.
+- EEPROM Storage: Ya lednya ketika baru di compilasi langsung menyala untuk led (hijau) menandakan program bisa berjalan sesuai dengan ketentuan pada code yang sauh kami buat akan tetapi ketika di bagaian tertentu sepeti kami jelaskan di atas program bermasalah.
+- Interrupt System: Setealh program di compilasi untuk led (hijau) nyala dan ketika kami pencet lednya tidak menghasilkan apa-apa sama seperti seblumnya led (hijau) nyala led (merah) mati.
+#### performance
+- Response Time: Waktu dari ketika tombol ditekan (interupsi aktif) sampai data disimpan di EEPROM tidak dapat kita hitung dengan tepat karena lampu LED merah yang menunjukkan proses tersebut tidak menyala. Kami telah menambahkan sedikit penundaan untuk mencegah kesalahan pembacaan (bounce), tetapi tampaknya itu tidak memadai atau tidak efektif karena fungsi interupsi belum berjalan dengan baik di perangkat asli.
+- Memory Usage: Program kami hanya memanfaatkan 1208 byte (sekitar 3%) dari seluruh memori program yang ada. Ini menunjukkan bahwa kode programnya masih sangat efisien dan tidak membebani mikrokontroler.
+- Perbandingan Hasil dengan Rencana Awal: Awalnya, kami berencana menggunakan keypad untuk memasukkan data, tetapi karena beberapa masalah, kami memutuskan untuk menggantinya dengan tombol tekan yang disambungkan ke sistem interrupt. Dengan demikian, cara kerja yang kami uji menjadi berbeda dari apa yang kami rencanakan sebelumnya.
+- Spesifikasi yang Berhasil / Tidak:
+- Berhasil (di Proteus):
+  - Bisa membandingkan nilai waktu dari RTC dan EEPROM.
+  - Bisa membaca waktu dari modul RTC.
+  - Bisa menampilkan waktu ke display (MAX7219).
+  - Bisa menyalakan buzzer jika nilai waktu berbeda cukup jauh.
+- Gagal atau Tidak Sesuai:
+  - Keypad tidak jadi digunakan.
+  - Display tidak berfungsi saat diuji pada perangkat asli.
+  - Interrupt tidak bekerja seperti yang diharapkan (tombol ditekan tidak menyalakan LED merah).
+- Modifikasi Perangkat Keras/Perangkat Lunak:
+- Tombol: Diubah menjadi tombol karena lebih mudah untuk diuji.
+- Layar LCD: Beralih ke tampilan MAX7219 karena lebih sesuai dengan format angka waktu dari RTC.
+- Kami juga melakukan percobaan dengan mengganti transistor dan kabel untuk memastikan bukan karena komponen yang rusak, namun hasilnya masih tetap tidak berubah.
+
+#### Documentasi
+![foto]()
+##### Link akses Vide: 
+
 
 ## v. Conclusion and future work
 Perancangan Student Corner e-Timer telah berhasil diimplementasikan menggunakan button yang akan interrupt jika mahasiswa menekan button tersebut (INT0) maka data waktu disimpan ke EEPROM pada address kelipatan 0x0008, Modul RTC akan membandingkan selisih waktu antara data terakhir dengan saat ini, jika selisih lebih dari 10 detik, maka program akan mengaktifkan sinyal pada PC2, yaitu LED Merah dan Buzzer yang menyala sebagai indikasi waktu sudah limit, tetapi jika LED Hijau menyala maka akan memberikan akses kepada mahasiswa untuk menekan button. RTC DS3231 untuk membaca waktu yang secara otomatis disimpan ke EEPROM dan tampilkan di MAX7219.
