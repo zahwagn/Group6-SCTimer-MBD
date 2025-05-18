@@ -1,20 +1,22 @@
-extern "C" {
-  void system_init();
-  void keypad_auth();
-  void check_time_limit();
-  void display_time();
-  void setup_peripherals();
+//--------------------------------------
+// Assembly via Arduino: RTC DS3231 Read
+//--------------------------------------
+extern "C"
+{
+  void SPI_MAX7219_init();
+  void MAX7219_disp_text();
+  void I2C_init();
+  void DS3231_RD();
+  void save_to_EEPROM();
+  void keypad();
 }
-
-void setup() {
-  setup_peripherals();
-  system_init();
-  Serial.begin(9600);  // Inisialisasi serial Arduino
+//-------------------------------------
+void setup()
+{
+  SPI_MAX7219_init();
+  MAX7219_disp_text();
+  I2C_init();
+  DS3231_RD();
 }
-
-void loop() {
-  keypad_auth();
-  check_time_limit();
-  display_time();
-  delay(100);
-}
+//-------------------------------------
+void loop() {}
