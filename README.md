@@ -42,4 +42,5 @@ Komponen pembatas arus untuk LED dan pull-up untuk button. Resistor pembatas aru
 
 ## v. Conclusion and future work
 Perancangan Student Corner e-Timer telah berhasil diimplementasikan menggunakan button yang akan interrupt jika mahasiswa menekan button tersebut (INT0) maka data waktu disimpan ke EEPROM pada address kelipatan 0x0008, Modul RTC akan membandingkan selisih waktu antara data terakhir dengan saat ini, jika selisih lebih dari 10 detik, maka program akan mengaktifkan sinyal pada PC2, yaitu LED Merah dan Buzzer yang menyala sebagai indikasi waktu sudah limit, tetapi jika LED Hijau menyala maka akan memberikan akses kepada mahasiswa untuk menekan button. RTC DS3231 untuk membaca waktu yang secara otomatis disimpan ke EEPROM dan tampilkan di MAX7219.
+
 Sebagai pengembangan pada masa depan, praktikan mengharapkan bisa menggunakan Keypad 4x4 ataupun RFID yang bisa membaca identitas mahasiswa dan menyimpannya di EEPROM secara efisien. Praktikkan juga mengharapkan kedepannya program bisa diperbaiki agar lebih baik. 
