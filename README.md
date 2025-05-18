@@ -81,15 +81,9 @@ Digunakan untuk mengembangkan simulasi sirkuit elektronik pada proyek. selain it
 - Layar LCD: Beralih ke tampilan MAX7219 karena lebih sesuai dengan format angka waktu dari RTC.
 - Kami juga melakukan percobaan dengan mengganti transistor dan kabel untuk memastikan bukan karena komponen yang rusak, namun hasilnya masih tetap tidak berubah.
 
-#### Documentasi
-- Merupakan Foto Rangkaian fisik yang memunculkan led (hijau menyala) ketika baru di jalankan
-<p align="center">
-  <img src="https://i.ibb.co/pj0d8GJN/S-8036371.jpg" width="100%" alt="test" />
-</p>
-
-- Merupakan Vide Uji coba dan simulasi rangkaian fisik yang kami lakukan
-##### Link akses Vide: https://youtube.com/shorts/f8pjXZdGZFo 
-
+### Documentasi
+Merupakan Vide0 Uji coba dan simulasi rangkaian fisik yang kami lakukan dapat di lihat untuk LED (hijau) sudah menyala dan kami melakukan uji coba langsung dengan cara menekan guna untuk melihat hasil output yang diberikan oleh LED merah apakah menyala atau tidak berikut di bawah merupakan Link Video Uji coba yang kami lakukan:
+- Link akses Vide: https://youtube.com/shorts/f8pjXZdGZFo 
 
 ## v. Conclusion and future work
 Perancangan Student Corner e-Timer telah berhasil diimplementasikan menggunakan button yang akan interrupt jika mahasiswa menekan button tersebut (INT0) maka data waktu disimpan ke EEPROM pada address kelipatan 0x0008, Modul RTC akan membandingkan selisih waktu antara data terakhir dengan saat ini, jika selisih lebih dari 10 detik, maka program akan mengaktifkan sinyal pada PC2, yaitu LED Merah dan Buzzer yang menyala sebagai indikasi waktu sudah limit, tetapi jika LED Hijau menyala maka akan memberikan akses kepada mahasiswa untuk menekan button. RTC DS3231 untuk membaca waktu yang secara otomatis disimpan ke EEPROM dan tampilkan di MAX7219.
