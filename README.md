@@ -37,24 +37,24 @@ LED pada PIN PC2 menyala ketika selisih waktu antara nilai di alamat EEPROM 0x00
 #### 7. Resistor
 Komponen pembatas arus untuk LED dan pull-up untuk button. Resistor pembatas arus untuk LED untuk melindungi dari arus berlebih dan pull-up atau pull-down untuk konfigurasi input. Mengaktifkan pull-up untuk menghindari adanya floating sehingga pembacaan terhindar dari noise.
 
-### C.Software Component
+## iii. Software implementation details
+### c. Software Component
 erancangan Perangkat lunak yang diterapkan dalam proyek Student Corner e-Time. Sistem ini dituliskan menggunakan bahasa Assembly melalui Arduino IDE, yang berfungsi untuk mengelola komponen seperti RTC, tombol, EEPROM, LED, buzzer, dan tampilan simulasi proyek menggunakan Proteus 8 Professional guna memastikan kinerja sistem yang sesuai
-#### Visual Studio Code (VS Code)
+#### 1. Visual Studio Code (VS Code)
 Dijadikan sebagai program pengolah teks alternatif untuk menyusun kode (jika tidak menggunakan Arduino IDE secara langsung). VS Code juga dapat ditambahkan dengan ekstensi untuk mendukung pengembangan proyek Arduino dan Assembly dengan penyorotan sintaks, IntelliSense, dan VS Code dipilih karena:
 - Mendukung penulisan kode dalam Assembly dan C/C++ dengan fitur seperti  penyorotan sintaks, penyelesaian otomatis (IntelliSense), serta integrasi dengan ekstensi Arduino.
 - Memfasilitasi pengaturan struktur proyek yang lebih baik dan efisien, terutama saat proyek menjadi lebih rumit.
 - Menjadi alternatif yang fleksibel bagi pengguna yang lebih akrab dengan manajemen kode melalui editor teks sederhana yang tetap kaya fitur.
-#### Arduino Uno
+#### 2. Arduino Uno
 Arduino Uno berperan sebagai pengendali utama yang mengatur dan menyelaraskan semua komponen dalam sistem. Fungsinya lebih dari sekadar mikrokontroler biasa, melainkan juga sebagai pelaksana utama dari semua logika yang ditulis dalam bahasa Assembly, termasuk berbagai fungsi penting. Dalam proyek ini arduino uno digunakan untuk:
 - Mengatur komunikasi antara komponen: Arduino Uno berfungsi sebagai pengendali utama yang mengkoordinasikan interaksi dengan RTC DS3231, EEPROM, dan LED Matrix MAX7219 melalui protokol seperti I2C dan SPI.
 - Menerima interupsi eksternal dan penyimpanan informasi: Ketika tombol ditekan, Uno mendeteksi sinyal melalui interrupt INT0 (PD2), kemudian secara otomatis menyimpan informasi waktu dari RTC ke EEPROM.
 - Melaksanakan logika program Assembly: Arduino Uno menjalankan kode Assembly yang meliputi pengambilan waktu, pengolahan informasi, serta penampilan hasil, dan juga mengatur buzzer sebagai sinyal atau alarm.
-#### Proteus 8 Professional
+#### 3.  Proteus 8 Professional
 Digunakan untuk mengembangkan simulasi sirkuit elektronik pada proyek. selain itu proteus juga memberi kesempatan untuk pengguna melakukan pengujian desain sirkuit dan program mikrokontroler tanpa memerlukan alat fisik dan diantara fungsi utamanya adalah mencangkup:
 - Membangun rangkaian simulasi untuk keseluruhan sistem, yang meliputi elemen-elemen seperti RTC, EEPROM, MAX7219, LED, buzzer, transistor, dan tombol.
 - Melaksanakan simulasi interaktif untuk melihat bagaimana sistem berfungsi secara langsung, termasuk pemantauan waktu, penyimpanan data, dan hasil tampilan.
 - Memastikan bahwa kode yang ditulis di Arduino IDE dapat berfungsi sesuai dengan logika yang diharapkan tanpa menghadapi masalah logika atau kesalahan fungsional saat diterapkan pada mikrokontroler.
-## iii. Software implementation details
 
 ## iv. Test results and performance evaluation
 ####  Functional Testing
