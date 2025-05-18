@@ -83,7 +83,7 @@ Digunakan untuk mengembangkan simulasi sirkuit elektronik pada proyek. selain it
 
 ### Documentasi
 Merupakan Vide0 Uji coba dan simulasi rangkaian fisik yang kami lakukan dapat di lihat untuk LED (hijau) sudah menyala dan kami melakukan uji coba langsung dengan cara menekan guna untuk melihat hasil output yang diberikan oleh LED merah apakah menyala atau tidak berikut di bawah merupakan Link Video Uji coba yang kami lakukan:
-- Link akses Video: https://youtube.com/shorts/f8pjXZdGZFo 
+- Link Akses Video: https://youtube.com/shorts/f8pjXZdGZFo 
 
 ## v. Conclusion and future work
 Perancangan Student Corner e-Timer telah berhasil diimplementasikan menggunakan button yang akan interrupt jika mahasiswa menekan button tersebut (INT0) maka data waktu disimpan ke EEPROM pada address kelipatan 0x0008, Modul RTC akan membandingkan selisih waktu antara data terakhir dengan saat ini, jika selisih lebih dari 10 detik, maka program akan mengaktifkan sinyal pada PC2, yaitu LED Merah dan Buzzer yang menyala sebagai indikasi waktu sudah limit, tetapi jika LED Hijau menyala maka akan memberikan akses kepada mahasiswa untuk menekan button. RTC DS3231 untuk membaca waktu yang secara otomatis disimpan ke EEPROM dan tampilkan di MAX7219.
